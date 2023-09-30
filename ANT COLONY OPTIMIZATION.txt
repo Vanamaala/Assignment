@@ -1,0 +1,925 @@
+ANT COLONY OPTIMIZATION:
+------------------------
+
+#include <iostream>
+#include <vector>
+#include <cstdlib>
+#include <ctime>
+#include <limits>
+#include <algorithm>
+#include <math.h>
+
+using namespace std;
+
+const int NUM_CITIES = 5;
+const int NUM_ANTS = 10;
+const double ALPHA = 1.0;   // Pheromone importance
+const double BETA = 2.0;    // Distance importance
+const double RHO = 0.5;     // Pheromone evaporation rate
+const double Q = 100.0;     // Pheromone deposit factor
+
+class City {
+public:
+    double x, y;
+};
+
+class Ant {
+public:
+    vector<int> tour;
+    double tourLength;
+
+    Ant() : tourLength(0.0) {}
+};
+
+double distance(const City& city1, const City& city2) {
+    double dx = city1.x - city2.x;
+    double dy = city1.y - city2.y;
+    return sqrt(dx * dx + dy * dy);
+}
+
+void initializePheromone(vector<vector<double>>& pheromone) {
+    int numCities = pheromone.size();
+    for (int i = 0; i < numCities; ++i) {
+        for (int j = 0; j < numCities; ++j) {
+            pheromone[i][j] = 0.1;  // Initial pheromone level
+        }
+    }
+}
+
+int selectNextCity(const Ant& ant, const vector<vector<double>>& pheromone, const vector<City>& cities) {
+    int currentCity = ant.tour.back();
+    double totalProbability = 0.0;
+    vector<double> probabilities;
+
+    for (size_t i = 0; i < cities.size(); ++i) {
+        if (find(ant.tour.begin(), ant.tour.end(), i) == ant.tour.end()) {
+            double pheromoneFactor = pow(pheromone[currentCity][i], ALPHA);
+            double distanceFactor = pow(1.0 / distance(cities[currentCity], cities[i]), BETA);
+            double probability = pheromoneFactor * distanceFactor;
+            probabilities.push_back(probability);
+            totalProbability += probability;
+        } else {
+            probabilities.push_back(0.0);
+        }
+    }
+
+    // Select the next city using roulette wheel selection
+    double random = (static_cast<double>(rand()) / RAND_MAX) * totalProbability;
+    double sum = 0.0;
+    for (size_t i = 0; i < probabilities.size(); ++i) {
+        sum += probabilities[i];
+        if (sum >= random) {
+            return i;
+        }
+    }
+
+    // In case of rounding errors, return the first unvisited city
+    for (size_t i = 0; i < cities.size(); ++i) {
+        if (find(ant.tour.begin(), ant.tour.end(), i) == ant.tour.end()) {
+            return i;
+        }
+    }
+
+    return -1;  // All cities visited
+}
+
+void antColonyOptimization(vector<City>& cities, vector<vector<double>>& pheromone) {
+    srand(static_cast<unsigned int>(time(nullptr)));
+    vector<Ant> ants(NUM_ANTS);
+    Ant bestAnt;
+    bestAnt.tourLength = numeric_limits<double>::max();
+
+    for (int iteration = 0; iteration < 1000; ++iteration) {
+        for (auto& ant : ants) {
+            ant.tour.clear();
+            ant.tourLength = 0.0;
+        }
+
+        for (size_t i = 0; i < cities.size(); ++i) {
+            for (auto& ant : ants) {
+                if (ant.tour.empty()) {
+                    ant.tour.push_back(rand() % cities.size());  // Start from a random city
+                } else {
+                    int nextCity = selectNextCity(ant, pheromone, cities);
+                    ant.tour.push_back(nextCity);
+                    ant.tourLength += distance(cities[ant.tour[ant.tour.size() - 2]], cities[nextCity]);
+                }
+            }
+        }
+
+        // Update the best ant's tour
+        for (const auto& ant : ants) {
+            if (ant.tourLength < bestAnt.tourLength) {
+                bestAnt = ant;
+            }
+        }
+
+        // Update pheromone levels
+        for (size_t i = 0; i < cities.size(); ++i) {
+            for (size_t j = 0; j < cities.size(); ++j) {
+                pheromone[i][j] *= (1.0 - RHO);  // Evaporation
+            }
+        }
+
+        for (size_t i = 1; i < bestAnt.tour.size(); ++i) {
+            int city1 = bestAnt.tour[i - 1];
+            int city2 = bestAnt.tour[i];
+            pheromone[city1][city2] += (Q / bestAnt.tourLength);  // Pheromone deposit
+        }
+    }
+
+    // Output the best tour found
+    cout << "Best Tour: ";
+    for (int city : bestAnt.tour) {
+        cout << city << " ";
+    }
+    cout << endl;
+    cout << "Best Tour Length: " << bestAnt.tourLength << endl;
+}
+
+int main() {
+    vector<City> cities(NUM_CITIES);
+    vector<vector<double>> pheromone(NUM_CITIES, vector<double>(NUM_CITIES));
+
+    // Initialize cities (you can provide your own coordinates)
+    cities[0].x = 0.0; cities[0].y = 0.0;
+    cities[1].x = 1.0; cities[1].y = 2.0;
+    cities[2].x = 2.0; cities[2].y = 1.0;
+    cities[3].x = 3.0; cities[3].y = 3.0;
+    cities[4].x = 4.0; cities[4].y = 2.0;
+
+    initializePheromone(pheromone);
+    antColonyOptimization(cities, pheromone);
+
+    return 0;
+}
+
+
+o/p:
+Best Tour: 4 3 2 1 0 
+Best Tour Length: 7.30056
+
+
+
+BRITISH MUSEUM SEARCH:
+------------------------
+
+#include <iostream>
+#include <vector>
+#include <algorithm>
+
+using namespace std;
+
+// A point structure to represent 2D points
+struct Point {
+    int x, y;
+};
+
+// Function to find the orientation of triplet (p, q, r)
+// Returns:
+// 0 if p, q, r are collinear
+// 1 if clockwise
+// 2 if counterclockwise
+int orientation(Point p, Point q, Point r) {
+    int val = (q.y - p.y) * (r.x - q.x) - (q.x - p.x) * (r.y - q.y);
+    if (val == 0) return 0;  // Collinear
+    return (val > 0) ? 1 : 2; // Clockwise or counterclockwise
+}
+
+// Function to compute the convex hull of a set of points
+vector<Point> convexHull(vector<Point> points) {
+    int n = points.size();
+    if (n < 3) {
+        // Convex hull is not possible with less than 3 points
+        return points;
+    }
+
+    // Find the point with the lowest y-coordinate (and leftmost if tied)
+    int minY = points[0].y;
+    int minIndex = 0;
+    for (int i = 1; i < n; i++) {
+        int y = points[i].y;
+        if ((y < minY) || (y == minY && points[i].x < points[minIndex].x)) {
+            minY = y;
+            minIndex = i;
+        }
+    }
+
+    // Place the point with the lowest y-coordinate at the beginning of the vector
+    swap(points[0], points[minIndex]);
+
+    // Sort the remaining points based on polar angle in counterclockwise order
+    sort(points.begin() + 1, points.end(), [&](Point p1, Point p2) {
+        int orientationVal = orientation(points[0], p1, p2);
+        if (orientationVal == 0) {
+            // If collinear, choose the one closer to the starting point
+            return (p1.x + p1.y) < (p2.x + p2.y);
+        }
+        return orientationVal == 2; // Sort in counterclockwise order
+    });
+
+    // Initialize the convex hull with the first three points
+    vector<Point> hull;
+    hull.push_back(points[0]);
+    hull.push_back(points[1]);
+    hull.push_back(points[2]);
+
+    // Process the remaining points
+    for (int i = 3; i < n; i++) {
+        while (hull.size() >= 2 && orientation(hull[hull.size() - 2], hull[hull.size() - 1], points[i]) != 2) {
+            hull.pop_back();
+        }
+        hull.push_back(points[i]);
+    }
+
+    return hull;
+}
+
+int main() {
+    vector<Point> points = {{0, 0}, {1, 1}, {2, 2}, {2, 0}, {3, 1}, {3, 3}};
+    vector<Point> convexHullPoints = convexHull(points);
+
+    cout << "Convex Hull Points:\n";
+    for (const Point& p : convexHullPoints) {
+        cout << "(" << p.x << ", " << p.y << ")\n";
+    }
+
+    return 0;
+}
+
+
+o/P:
+Convex Hull Points:
+(0, 0)
+(2, 0)
+(3, 1)
+(3, 3)
+
+
+DEPTH FIRST SEARCH:
+--------------------
+
+#include <iostream>
+#include <vector>
+#include <stack>
+
+using namespace std;
+
+class Graph {
+    int V; // Number of vertices
+
+    // Pointer to a vector containing adjacency lists
+    vector<vector<int>> adj;
+
+public:
+    Graph(int V); // Constructor
+    void addEdge(int v, int w); // Add an edge to the graph
+    void DFS(int startVertex); // Depth-First Search starting from a given vertex
+};
+
+// Constructor
+Graph::Graph(int V) {
+    this->V = V;
+    adj.resize(V);
+}
+
+// Add an edge to the graph
+void Graph::addEdge(int v, int w) {
+    adj[v].push_back(w);
+}
+
+// Depth-First Search starting from a given vertex
+void Graph::DFS(int startVertex) {
+    // Create a vector to keep track of visited vertices
+    vector<bool> visited(V, false);
+
+    // Create a stack for DFS
+    stack<int> stack;
+
+    // Push the starting vertex onto the stack
+    stack.push(startVertex);
+
+    while (!stack.empty()) {
+        // Pop a vertex from the stack and print it
+        int currentVertex = stack.top();
+        stack.pop();
+
+        if (!visited[currentVertex]) {
+            cout << currentVertex << " ";
+            visited[currentVertex] = true;
+        }
+
+        // Get all adjacent vertices of the popped vertex
+        // If an adjacent vertex is not visited, push it to the stack
+        for (const int& neighbor : adj[currentVertex]) {
+            if (!visited[neighbor]) {
+                stack.push(neighbor);
+            }
+        }
+    }
+}
+
+int main() {
+    Graph graph(7); // Create a graph with 7 vertices
+
+    // Add edges to the graph
+    graph.addEdge(0, 1);
+    graph.addEdge(0, 2);
+    graph.addEdge(1, 3);
+    graph.addEdge(1, 4);
+    graph.addEdge(2, 5);
+    graph.addEdge(2, 6);
+
+    cout << "Depth-First Search starting from vertex 0:\n";
+    graph.DFS(0);
+
+    return 0;
+}
+
+
+o/p:
+Depth-First Search starting from vertex 0:
+0 2 6 5 1 4 3 
+
+
+
+BREADTH FIRST SEARCH:
+---------------------
+#include <iostream>
+#include <vector>
+#include <queue>
+
+using namespace std;
+
+class Graph {
+    int V; // Number of vertices
+
+    // Pointer to a vector containing adjacency lists
+    vector<vector<int>> adj;
+
+public:
+    Graph(int V); // Constructor
+    void addEdge(int v, int w); // Add an edge to the graph
+    void BFS(int startVertex); // Breadth-First Search starting from a given vertex
+};
+
+// Constructor
+Graph::Graph(int V) {
+    this->V = V;
+    adj.resize(V);
+}
+
+// Add an edge to the graph
+void Graph::addEdge(int v, int w) {
+    adj[v].push_back(w);
+}
+
+// Breadth-First Search starting from a given vertex
+void Graph::BFS(int startVertex) {
+    // Create a vector to keep track of visited vertices
+    vector<bool> visited(V, false);
+
+    // Create a queue for BFS
+    queue<int> queue;
+
+    // Mark the current vertex as visited and enqueue it
+    visited[startVertex] = true;
+    queue.push(startVertex);
+
+    while (!queue.empty()) {
+        // Dequeue a vertex from the queue and print it
+        int currentVertex = queue.front();
+        queue.pop();
+        cout << currentVertex << " ";
+
+        // Get all adjacent vertices of the dequeued vertex
+        // If an adjacent vertex is not visited, mark it as visited and enqueue it
+        for (const int& neighbor : adj[currentVertex]) {
+            if (!visited[neighbor]) {
+                visited[neighbor] = true;
+                queue.push(neighbor);
+            }
+        }
+    }
+}
+
+int main() {
+    Graph graph(7); // Create a graph with 7 vertices
+
+    // Add edges to the graph
+    graph.addEdge(0, 1);
+    graph.addEdge(0, 2);
+    graph.addEdge(1, 3);
+    graph.addEdge(1, 4);
+    graph.addEdge(2, 5);
+    graph.addEdge(2, 6);
+
+    cout << "Breadth-First Search starting from vertex 0:\n";
+    graph.BFS(0);
+
+    return 0;
+}
+
+
+o/P:
+Breadth-First Search starting from vertex 0:
+0 1 2 3 4 5 6 
+
+
+
+=====================================================================================
+
+
+BRITISH MUSEUM SEARCH:
+
+#include <iostream>
+#include <vector>
+#include <algorithm>
+
+using namespace std;
+
+// A point structure to represent 2D points
+struct Point {
+    int x, y;
+};
+
+// Function to find the orientation of triplet (p, q, r)
+// Returns:
+// 0 if p, q, r are collinear
+// 1 if clockwise
+// 2 if counterclockwise
+int orientation(Point p, Point q, Point r) {
+    int val = (q.y - p.y) * (r.x - q.x) - (q.x - p.x) * (r.y - q.y);
+    if (val == 0) return 0;  // Collinear
+    return (val > 0) ? 1 : 2; // Clockwise or counterclockwise
+}
+
+// Function to compute the convex hull of a set of points
+vector<Point> convexHull(vector<Point> points) {
+    int n = points.size();
+    if (n < 3) {
+        // Convex hull is not possible with less than 3 points
+        return points;
+    }
+
+    // Find the point with the lowest y-coordinate (and leftmost if tied)
+    int minY = points[0].y;
+    int minIndex = 0;
+    for (int i = 1; i < n; i++) {
+        int y = points[i].y;
+        if ((y < minY) || (y == minY && points[i].x < points[minIndex].x)) {
+            minY = y;
+            minIndex = i;
+        }
+    }
+
+    // Place the point with the lowest y-coordinate at the beginning of the vector
+    swap(points[0], points[minIndex]);
+
+    // Sort the remaining points based on polar angle in counterclockwise order
+    sort(points.begin() + 1, points.end(), [&](Point p1, Point p2) {
+        int orientationVal = orientation(points[0], p1, p2);
+        if (orientationVal == 0) {
+            // If collinear, choose the one closer to the starting point
+            return (p1.x + p1.y) < (p2.x + p2.y);
+        }
+        return orientationVal == 2; // Sort in counterclockwise order
+    });
+
+    // Initialize the convex hull with the first three points
+    vector<Point> hull;
+    hull.push_back(points[0]);
+    hull.push_back(points[1]);
+    hull.push_back(points[2]);
+
+    // Process the remaining points
+    for (int i = 3; i < n; i++) {
+        while (hull.size() >= 2 && orientation(hull[hull.size() - 2], hull[hull.size() - 1], points[i]) != 2) {
+            hull.pop_back();
+        }
+        hull.push_back(points[i]);
+    }
+
+    return hull;
+}
+
+int main() {
+    vector<Point> points = {{0, 0}, {1, 1}, {2, 2}, {2, 0}, {3, 1}, {3, 3}};
+    vector<Point> convexHullPoints = convexHull(points);
+
+    cout << "Convex Hull Points:\n";
+    for (const Point& p : convexHullPoints) {
+        cout << "(" << p.x << ", " << p.y << ")\n";
+    }
+
+    return 0;
+}
+
+
+==================================================================================================================
+
+HILL CLIMBING SEARCH:
+
+
+
+#include <iostream>
+#include <cmath>
+#include <cstdlib>
+#include <ctime>
+
+using namespace std;
+
+// Define the objective function to be optimized
+double objectiveFunction(double x) {
+    // Example: minimize f(x) = (x - 3)^2
+    return pow(x - 3, 2);
+}
+
+// Hill climbing algorithm
+double hillClimbing(double initialX, double stepSize, int maxIterations) {
+    double currentX = initialX;
+    double currentObjective = objectiveFunction(currentX);
+
+    for (int i = 0; i < maxIterations; i++) {
+        // Generate a neighboring solution by adding or subtracting stepSize
+        double neighborX1 = currentX + stepSize;
+        double neighborX2 = currentX - stepSize;
+
+        // Calculate the objective values for the neighboring solutions
+        double neighborObjective1 = objectiveFunction(neighborX1);
+        double neighborObjective2 = objectiveFunction(neighborX2);
+
+        // Determine which neighbor has a better objective value
+        if (neighborObjective1 < currentObjective) {
+            currentX = neighborX1;
+            currentObjective = neighborObjective1;
+        } else if (neighborObjective2 < currentObjective) {
+            currentX = neighborX2;
+            currentObjective = neighborObjective2;
+        } else {
+            // If no improvement, break out of the loop
+            break;
+        }
+    }
+
+    return currentX;
+}
+
+int main() {
+    srand(time(0)); // Seed the random number generator with current time
+
+    double initialX = static_cast<double>(rand()) / RAND_MAX * 10.0; // Random initial solution between 0 and 10
+    double stepSize = 0.1;
+    int maxIterations = 100;
+
+    double finalSolution = hillClimbing(initialX, stepSize, maxIterations);
+
+    cout << "Initial Solution: " << initialX << endl;
+    cout << "Final Solution: " << finalSolution << endl;
+    cout << "Objective Value: " << objectiveFunction(finalSolution) << endl;
+
+    return 0;
+}
+
+
+============================================================================================================================
+
+
+BEAM SEARCH:
+
+#include <iostream>
+#include <vector>
+#include <queue>
+#include <algorithm>
+
+using namespace std;
+
+// Define a state structure for the search problem
+struct State {
+    int value;
+    vector<int> path;
+
+    State(int val) : value(val) {}
+};
+
+// Define a comparison operator for State objects to use in priority queue
+struct StateComparator {
+    bool operator()(const State& s1, const State& s2) {
+        return s1.value < s2.value;
+    }
+};
+
+// Function to perform beam search
+vector<int> beamSearch(vector<vector<int>>& searchTree, int k) {
+    int numLevels = searchTree.size();
+    priority_queue<State, vector<State>, StateComparator> beam[k];
+
+    // Initialize the first level with the initial states
+    for (int i = 0; i < k; i++) {
+        beam[i].push(State(searchTree[0][i]));
+        beam[i].top().path.push_back(i);
+    }
+
+    // Perform beam search
+    for (int level = 1; level < numLevels; level++) {
+        priority_queue<State, vector<State>, StateComparator> newBeam[k];
+
+        for (int i = 0; i < k; i++) {
+            for (int j = 0; j < k; j++) {
+                State nextState(searchTree[level][j] + beam[i].top().value);
+                nextState.path = beam[i].top().path;
+                nextState.path.push_back(j);
+
+                if (newBeam[j].size() < k) {
+                    newBeam[j].push(nextState);
+                } else if (nextState.value < newBeam[j].top().value) {
+                    newBeam[j].pop();
+                    newBeam[j].push(nextState);
+                }
+            }
+        }
+
+        for (int i = 0; i < k; i++) {
+            beam[i] = newBeam[i];
+        }
+    }
+
+    // Find the best path among all beams
+    State bestState = beam[0].top();
+    for (int i = 1; i < k; i++) {
+        if (beam[i].top().value < bestState.value) {
+            bestState = beam[i].top();
+        }
+    }
+
+    return bestState.path;
+}
+
+int main() {
+    // Define a sample search tree as a 2D vector
+    vector<vector<int>> searchTree = {
+        {5, 7, 9},
+        {4, 6, 8},
+        {2, 1, 3},
+    };
+
+    int k = 2; // Beam width
+
+    vector<int> bestPath = beamSearch(searchTree, k);
+
+    cout << "Best Path: ";
+    for (int node : bestPath) {
+        cout << node << " ";
+    }
+    cout << endl;
+
+    return 0;
+}
+
+
+===============================================================================
+
+BRANCH AND BOUND:
+
+#include <iostream>
+#include <vector>
+#include <algorithm>
+#include <limits>
+
+using namespace std;
+
+const int INF = numeric_limits<int>::max();
+
+// Function to calculate the cost of a given path
+int calculateCost(vector<vector<int>>& graph, vector<int>& path) {
+    int cost = 0;
+    for (int i = 0; i < path.size() - 1; ++i) {
+        int from = path[i];
+        int to = path[i + 1];
+        cost += graph[from][to];
+    }
+    return cost;
+}
+
+// Recursive Branch and Bound function to find the optimal TSP tour
+void branchAndBound(vector<vector<int>>& graph, vector<int>& currentPath,
+                    vector<bool>& visited, int& currentCost, int& minCost) {
+    int n = graph.size();
+    int currentVertex = currentPath.back();
+
+    if (currentPath.size() == n) {
+        // All cities visited, consider going back to the starting city
+        int cost = currentCost + graph[currentVertex][0];
+        minCost = min(minCost, cost);
+        return;
+    }
+
+    for (int nextVertex = 0; nextVertex < n; ++nextVertex) {
+        if (!visited[nextVertex] && graph[currentVertex][nextVertex] != 0) {
+            int originalCost = currentCost;
+            currentCost += graph[currentVertex][nextVertex];
+
+            if (currentCost < minCost) {
+                currentPath.push_back(nextVertex);
+                visited[nextVertex] = true;
+
+                branchAndBound(graph, currentPath, visited, currentCost, minCost);
+
+                visited[nextVertex] = false;
+                currentPath.pop_back();
+            }
+
+            currentCost = originalCost;
+        }
+    }
+}
+
+int main() {
+    int n; // Number of cities
+    cout << "Enter the number of cities: ";
+    cin >> n;
+
+    vector<vector<int>> graph(n, vector<int>(n));
+
+    cout << "Enter the distance matrix for the cities:\n";
+    for (int i = 0; i < n; ++i) {
+        for (int j = 0; j < n; ++j) {
+            cin >> graph[i][j];
+        }
+    }
+
+    vector<int> currentPath;
+    vector<bool> visited(n, false);
+    int currentCost = 0;
+    int minCost = INF;
+
+    currentPath.push_back(0); // Starting from city 0
+    visited[0] = true;
+
+    branchAndBound(graph, currentPath, visited, currentCost, minCost);
+
+    cout << "Optimal TSP Tour: ";
+    for (int city : currentPath) {
+        cout << city << " ";
+    }
+    cout << "0\n"; // Return to the starting city
+    cout << "Minimum Cost: " << minCost << endl;
+
+    return 0;
+}
+
+
+========================================================================================================
+
+A*:
+
+#include <iostream>
+#include <vector>
+#include <queue>
+#include <cmath>
+#include <algorithm>
+#include <map>
+
+using namespace std;
+
+// Define a structure to represent a node in the grid
+struct Node {
+    int x, y;       // Coordinates of the node
+    int g;          // Cost from the start node to this node
+    int h;          // Heuristic (estimated) cost from this node to the goal node
+    int f;          // Total cost (g + h)
+    Node* parent;   // Parent node (used to reconstruct the path)
+
+    Node(int x, int y) : x(x), y(y), g(0), h(0), f(0), parent(nullptr) {}
+
+    bool operator<(const Node& other) const {
+        return f > other.f;
+    }
+};
+
+// Define a function to calculate the Manhattan distance heuristic
+int calculateManhattanDistance(int x1, int y1, int x2, int y2) {
+    return abs(x1 - x2) + abs(y1 - y2);
+}
+
+// Define the A* algorithm function
+vector<pair<int, int>> astar(vector<vector<int>>& grid, pair<int, int> start, pair<int, int> goal) {
+    int rows = grid.size();
+    int cols = grid[0].size();
+    
+    // Create a 2D vector of nodes representing the grid
+    vector<vector<Node>> nodes(rows, vector<Node>(cols, Node(0, 0)));
+
+    // Initialize nodes with coordinates
+    for (int x = 0; x < rows; x++) {
+        for (int y = 0; y < cols; y++) {
+            nodes[x][y].x = x;
+            nodes[x][y].y = y;
+        }
+    }
+
+    // Priority queue for open nodes
+    priority_queue<Node> openSet;
+
+    // Map to track the cost of reaching each node
+    map<pair<int, int>, int> cost;
+
+    // Start and goal nodes
+    Node* startNode = &nodes[start.first][start.second];
+    Node* goalNode = &nodes[goal.first][goal.second];
+
+    // Add the start node to the open set
+    openSet.push(*startNode);
+
+    while (!openSet.empty()) {
+        // Get the node with the lowest total cost (f) from the open set
+        Node current = openSet.top();
+        openSet.pop();
+
+        // Check if we have reached the goal
+        if (current.x == goalNode->x && current.y == goalNode->y) {
+            // Reconstruct the path from the goal node to the start node
+            vector<pair<int, int>> path;
+            Node* node = goalNode;
+            while (node != nullptr) {
+                path.push_back({node->x, node->y});
+                node = node->parent;
+            }
+            reverse(path.begin(), path.end());
+            return path;
+        }
+
+        // Generate neighbor nodes
+        vector<pair<int, int>> neighbors = {
+            {current.x - 1, current.y},
+            {current.x + 1, current.y},
+            {current.x, current.y - 1},
+            {current.x, current.y + 1}
+        };
+
+        for (const pair<int, int>& neighbor : neighbors) {
+            int neighborX = neighbor.first;
+            int neighborY = neighbor.second;
+
+            // Check if the neighbor is within the grid bounds
+            if (neighborX >= 0 && neighborX < rows && neighborY >= 0 && neighborY < cols) {
+                Node* neighborNode = &nodes[neighborX][neighborY];
+
+                // Check if the neighbor is a valid move (not an obstacle)
+                if (grid[neighborX][neighborY] != 1) {
+                    // Calculate the cost to reach the neighbor node
+                    int tentativeG = current.g + 1;
+
+                    // If the neighbor has not been visited or the new path is better
+                    if (cost.find({neighborX, neighborY}) == cost.end() || tentativeG < cost[{neighborX, neighborY}]) {
+                        neighborNode->parent = &current;
+                        neighborNode->g = tentativeG;
+                        neighborNode->h = calculateManhattanDistance(neighborX, neighborY, goalNode->x, goalNode->y);
+                        neighborNode->f = neighborNode->g + neighborNode->h;
+
+                        // Add the neighbor node to the open set
+                        openSet.push(*neighborNode);
+
+                        // Update the cost
+                        cost[{neighborX, neighborY}] = tentativeG;
+                    }
+                }
+            }
+        }
+    }
+
+    // If the open set is empty and we haven't reached the goal, there is no path
+    return {};
+}
+
+int main() {
+    // Define a grid with obstacles (1) and free cells (0)
+    vector<vector<int>> grid = {
+        {0, 0, 0, 0, 1},
+        {0, 1, 1, 0, 1},
+        {0, 1, 0, 0, 0},
+        {0, 0, 0, 1, 0},
+        {0, 1, 0, 0, 0}
+    };
+
+    // Define the start and goal coordinates
+    pair<int, int> start = {0, 0};
+    pair<int, int> goal = {4, 4};
+
+    // Find the path using A*
+    vector<pair<int, int>> path = astar(grid, start, goal);
+
+    // Print the path
+    if (!path.empty()) {
+        cout << "Path found:" << endl;
+        for (const pair<int, int>& point : path) {
+            cout << "(" << point.first << ", " << point.second << ")" << endl;
+        }
+    } else {
+        cout << "No path found." << endl;
+    }
+
+    return 0;
+}
+
+
